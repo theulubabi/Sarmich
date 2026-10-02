@@ -11,7 +11,6 @@ jobs:
       - name: Get code
         uses: actions/checkout@v4
 
-      # Works both when the project files are in the repo and when only UsarBrowser.zip was uploaded.
       - name: Find project
         run: |
           if [ -f settings.gradle.kts ]; then
@@ -20,12 +19,12 @@ jobs:
             unzip -q -o UsarBrowser.zip -d unpacked
             echo "PROJECT_DIR=unpacked/UsarBrowser" >> "$GITHUB_ENV"
           else
-            echo "Neither settings.gradle.kts nor UsarBrowser.zip was found in the repository root."
+            echo "::error::UsarBrowser.zip not found in the repository root"
             exit 1
           fi
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -37,7 +36,31 @@ jobs:
 
       - name: Build APK
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle assembleDebug --stacktrace -Pusar.googleWebClientId="${{ secrets.GOOGLE_WEB_CLIENT_ID }}"
+        run: |
+          set -o pipefail
+          gradle assembleDebug --console=plain -Pusar.googleWebClientId="${{ secrets.GOOGLE_WEB_CLIENT_ID }}" 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      # On failure: show only the real errors at the top of the run page.
+      - name: Show errors
+        if: failure()
+        run: |
+          LOG="$GITHUB_WORKSPACE/build.log"
+          [ -f "$LOG" ] || exit 0
+          {
+            echo "## Build errors"
+            echo '```'
+            grep -E "^e: |error: |AAPT: error|resource .* not found" "$LOG" | sed "s#file://$GITHUB_WORKSPACE/##" | head -60
+            echo
+            grep -A 15 "What went wrong" "$LOG" | head -60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
