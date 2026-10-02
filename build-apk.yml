@@ -40,7 +40,6 @@ jobs:
           set -o pipefail
           gradle assembleDebug --console=plain -Pusar.googleWebClientId="${{ secrets.GOOGLE_WEB_CLIENT_ID }}" 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
 
-      # On failure: show only the real errors at the top of the run page.
       - name: Show errors
         if: failure()
         run: |
